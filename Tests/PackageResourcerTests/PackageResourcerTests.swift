@@ -4,14 +4,7 @@ import XCTest
 final class PackageResourcerTests: XCTestCase {
     
     var resourcer: PackageResourcer!
-    
-    let fileManager = FileManager()
-    
-    var searchPath: FileManager.SearchPathDirectory!
-    
-    var pathUrl: URL! {
-        return fileManager.urls(for: searchPath, in: .userDomainMask).first
-    }
+    var bundle: Bundle!
     
     var exp: XCTestExpectation!
     
@@ -19,7 +12,6 @@ final class PackageResourcerTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
-        searchPath = .downloadsDirectory
     }
     
     override func tearDown() {
@@ -27,43 +19,55 @@ final class PackageResourcerTests: XCTestCase {
         let manager = FileManager()
         
         filesCreated.forEach { (fileName) in
-            let url = pathUrl.appendingPathComponent(fileName)
-            
-            try? manager.removeItem(at: url)
+            try? deleteFile(fileName, with: manager)
         }
     }
     
+    private func deleteFile(_ name: String, with manager: FileManager = FileManager()) throws {
+        let url = bundle
+            .bundleURL
+            .appendingPathComponent(name)
+        
+        try manager.removeItem(at: url)
+    }
+    
     func testAssetDownload() {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct
-        // results.
-        let url: URL! = Mocks.assetURLs.first?.value
-        exp = expectation(description: "N/A")
-        var results: [Data] = []
-        resourcer = PackageResourcer(urls: [:])
-        resourcer.getAsset(url) { (result) in
-            switch result {
-            case .success(let data):
-                results.append(data.0)
-            case .failure(let error):
-                XCTFail(error.localizedDescription)
+        do {
+            let url: URL! = Mocks.assetURLs.first?.value
+            exp = expectation(description: "N/A")
+            var results: [Data] = []
+            resourcer = try PackageResourcer(urls: [:])
+            resourcer.getAsset(url) { (result) in
+                switch result {
+                case .success(let data):
+                    results.append(data.0)
+                case .failure(let error):
+                    XCTFail(error.localizedDescription)
+                }
+                self.exp.fulfill()
             }
-            self.exp.fulfill()
+            wait(for: [exp], timeout: 30)
+            XCTAssertEqual(results.count, 1)
+        } catch {
+            XCTFail(error.localizedDescription)
         }
-        wait(for: [exp], timeout: 30)
-        XCTAssertEqual(results.count, 1)
     }
     
     func testResourceExists() {
         do {
             let randomData = UUID().uuidString.data(using: .utf8)
             let resourceName = "text.txt"
-            let resourcer = PackageResourcer(urls: [:])
+            let resourcer = try PackageResourcer(urls: [:])
             XCTAssertFalse(resourcer.resourceExists(with: resourceName))
-            let url = pathUrl.appendingPathComponent(resourceName)
+            self.bundle = resourcer.bundle
+            let url = bundle
+                .bundleURL
+                .appendingPathComponent(resourceName)
             try randomData!.write(to: url)
             filesCreated.append(resourceName)
             XCTAssertTrue(resourcer.resourceExists(with: resourceName))
+            try deleteFile(resourceName)
+            XCTAssertFalse(resourcer.resourceExists(with: resourceName))
         } catch {
             XCTFail(error.localizedDescription)
         }

@@ -14,7 +14,6 @@ class PackageResourcer {
         case noData(URLResponse?)
         case alreadyExists(String)
         case saveFailed(String, Error)
-        case urlMissing
         
         var localizedDescription: String {
             switch self {
@@ -26,8 +25,6 @@ class PackageResourcer {
                 return "Not an error"
             case .saveFailed(let name, _):
                 return "Couldn't save \(name)"
-            case .urlMissing:
-                return "URL Missing"
             }
         }
         
@@ -47,13 +44,11 @@ class PackageResourcer {
     
     private let fileManager: FileManager
     
-    let searchPath: FileManager.SearchPathDirectory
-    
-    var pathURL: URL? {
-        return fileManager
-            .urls(for: .downloadsDirectory, in: .userDomainMask)
-            .first
+    var bundleURL: URL {
+        return bundle.bundleURL
     }
+    
+    public let bundle: Bundle
     
     var delegate: PackageResourcerDelegate?
     
@@ -66,10 +61,11 @@ class PackageResourcer {
         }
     }
     
-    public init(urls: [String: URL], searchPath: FileManager.SearchPathDirectory = .downloadsDirectory) {
+    public init(urls: [String: URL]) throws {
         self.assetURLs = urls
-        self.fileManager = FileManager()
-        self.searchPath = searchPath
+        let fileManager = FileManager()
+        self.fileManager = fileManager
+        self.bundle = try fileManager.createBundle()
     }
     
     public func process() {
@@ -93,10 +89,7 @@ class PackageResourcer {
     
     func resourceExists(with name: String) -> Bool {
         do {
-            guard let url = pathURL else {
-                return false
-            }
-            return try url
+            return try bundleURL
                 .appendingPathComponent(name)
                 .checkResourceIsReachable()
         } catch {
@@ -141,9 +134,7 @@ class PackageResourcer {
         .forEach({ (data, response) in
             let fileName = assetURLs.filter({ $0.value == response.url }).first!.key
             do {
-                guard let url = pathURL?.appendingPathComponent(fileName) else {
-                    throw ResourcerError.urlMissing
-                }
+                let url = bundleURL.appendingPathComponent(fileName)
                 try data.write(to: url)
             } catch {
                 errors.append(error)
@@ -164,5 +155,36 @@ class PackageResourcer {
             return nil
         }
         return (UUID().uuidString,error)
+    }
+    
+}
+
+extension FileManager {
+    enum BundleError: Error {
+        case rootPathNotFound
+        case bundleError
+        
+        var localizedDescription: String {
+            switch self {
+            case .rootPathNotFound:
+                return "Root Path Not Found"
+            case .bundleError:
+                return "Couldn't create Bundle"
+            }
+        }
+    }
+    
+    func createBundle() throws -> Bundle {
+        guard let rootURL = urls(for: .downloadsDirectory, in: .userDomainMask).first else {
+            throw BundleError.rootPathNotFound
+        }
+        let bundleURL = rootURL.appendingPathComponent("Resources.bundle")
+        try createDirectory(at: bundleURL, withIntermediateDirectories: true)
+        
+        guard let bundle = Bundle(url: bundleURL) else {
+            throw BundleError.bundleError
+        }
+        
+        return bundle
     }
 }
