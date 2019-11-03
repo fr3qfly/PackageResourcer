@@ -50,7 +50,7 @@ public class PackageResourcer {
     
     private(set) public var bundle: Bundle
     
-    var delegate: PackageResourcerDelegate?
+    public var delegate: PackageResourcerDelegate?
     
     var downloadResults: [DownloadResult] = [] {
         didSet {
