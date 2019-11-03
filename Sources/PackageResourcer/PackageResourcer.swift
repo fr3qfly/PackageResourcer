@@ -2,12 +2,12 @@ import Foundation
 
 typealias DownloadResult = Result<(Data, HTTPURLResponse), Error>
 
-protocol PackageResourcerDelegate: AnyObject {
+public protocol PackageResourcerDelegate: AnyObject {
     func finishedResourcing(_ resourcer: PackageResourcer)
     func packageResourcer(_ resourcer: PackageResourcer, finishedResourcingWithErrors: [String: Error])
 }
 
-class PackageResourcer {
+public class PackageResourcer {
     
     enum ResourcerError: Error {
         case dataTaskError(Error, URLResponse?)
@@ -89,8 +89,9 @@ class PackageResourcer {
         bundle = try fileManager.createBundle()
     }
     
-    public func reprocess() {
-        // TODO: implement
+    public func reprocess() throws {
+        try clearBundle()
+        process()
     }
     
     func resourceExists(with name: String) -> Bool {
