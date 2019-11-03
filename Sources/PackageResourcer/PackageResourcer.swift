@@ -14,6 +14,7 @@ class PackageResourcer {
         case noData(URLResponse?)
         case alreadyExists(String)
         case saveFailed(String, Error)
+        case notValidJSON(Data)
         
         var localizedDescription: String {
             switch self {
@@ -25,6 +26,8 @@ class PackageResourcer {
                 return "Not an error"
             case .saveFailed(let name, _):
                 return "Couldn't save \(name)"
+            case .notValidJSON:
+                return "Colorset link didn't contain valid json"
             }
         }
         
@@ -142,7 +145,11 @@ class PackageResourcer {
         .forEach({ (data, response) in
             let fileName = assetURLs.filter({ $0.value == response.url }).first!.key
             do {
-                try saveFile(data, with: fileName)
+                if fileName.contains(".colorset") {
+                    try saveColorSet(data, with: fileName)
+                } else {
+                    try saveFile(data, with: fileName)
+                }
             } catch {
                 errors.append(error)
             }
@@ -167,6 +174,16 @@ class PackageResourcer {
     func saveFile(_ data: Data, with name: String) throws {
         let url = bundleURL.appendingPathComponent(name)
         try data.write(to: url)
+    }
+    
+    func saveColorSet(_ data: Data, with name: String) throws {
+        let url = bundleURL.appendingPathComponent(name)
+        try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
+        guard try JSONSerialization.jsonObject(with: data) as? [String: Any] != nil else {
+            throw ResourcerError.notValidJSON(data)
+        }
+        let jsonURL = url.appendingPathComponent("Contents.json")
+        try data.write(to: jsonURL)
     }
     
     private func idError(_ error: Error) -> (String, Error)? {

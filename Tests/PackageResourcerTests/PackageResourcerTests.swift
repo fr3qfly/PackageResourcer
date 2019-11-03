@@ -15,7 +15,14 @@ final class PackageResourcerTests: XCTestCase {
     
     var filesCreated: [String] = []
     
-    var errors: [String: Error] = [:]
+    var errors: [String: Error] = [:] {
+        didSet {
+            guard !errors.isEmpty else {
+                return
+            }
+            XCTFail(errors.description)
+        }
+    }
     
     override func setUp() {
         super.setUp()
@@ -25,9 +32,6 @@ final class PackageResourcerTests: XCTestCase {
     override func tearDown() {
         super.tearDown()
         try? resourcer.clearBundle()
-//        filesCreated.forEach { (fileName) in
-//            try? deleteFile(fileName)
-//        }
     }
     
     private func deleteFile(_ name: String) throws {
@@ -117,6 +121,29 @@ final class PackageResourcerTests: XCTestCase {
         return 0
         #endif
         
+    }
+    
+    func testColorSetDownload() {
+        do {
+            exp = expectation(description: "Assets Download Process")
+            let name = "tomato"
+            let assetURLs = Mocks.assetURLs
+            resourcer = try PackageResourcer(urls: assetURLs)
+            resourcer.delegate = self
+            bundle = resourcer.bundle
+            resourcer.process()
+            waitForExpectations(timeout: 30)
+            XCTAssertEqual(resourcer.bundle, bundle)
+            
+            if #available(iOS 11.0, *) {
+                let tomato = UIColor(named: name, in: bundle, compatibleWith: nil)
+                XCTAssertNotNil(tomato)
+            } else {
+                XCTFail("ColorSets only available after iOS 11")
+            }
+        } catch {
+            XCTFail(error.localizedDescription)
+        }
     }
 
     static var allTests = [
