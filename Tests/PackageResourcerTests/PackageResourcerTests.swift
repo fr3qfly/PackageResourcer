@@ -1,4 +1,9 @@
 import XCTest
+#if canImport(UIKIt)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 @testable import PackageResourcer
 
 final class PackageResourcerTests: XCTestCase {
@@ -10,25 +15,28 @@ final class PackageResourcerTests: XCTestCase {
     
     var filesCreated: [String] = []
     
+    var errors: [String: Error] = [:]
+    
     override func setUp() {
         super.setUp()
+        errors = [:]
     }
     
     override func tearDown() {
         super.tearDown()
-        let manager = FileManager()
-        
-        filesCreated.forEach { (fileName) in
-            try? deleteFile(fileName, with: manager)
-        }
+        try? resourcer.clearBundle()
+//        filesCreated.forEach { (fileName) in
+//            try? deleteFile(fileName)
+//        }
     }
     
-    private func deleteFile(_ name: String, with manager: FileManager = FileManager()) throws {
-        let url = bundle
+    private func deleteFile(_ name: String) throws {
+        let url = resourcer
+            .bundle
             .bundleURL
             .appendingPathComponent(name)
         
-        try manager.removeItem(at: url)
+        try resourcer.fileManager.removeItem(at: url)
     }
     
     func testAssetDownload() {
@@ -57,7 +65,7 @@ final class PackageResourcerTests: XCTestCase {
         do {
             let randomData = UUID().uuidString.data(using: .utf8)
             let resourceName = "text.txt"
-            let resourcer = try PackageResourcer(urls: [:])
+            resourcer = try PackageResourcer(urls: [:])
             XCTAssertFalse(resourcer.resourceExists(with: resourceName))
             self.bundle = resourcer.bundle
             let url = bundle
@@ -72,10 +80,49 @@ final class PackageResourcerTests: XCTestCase {
             XCTFail(error.localizedDescription)
         }
     }
+    
+    func testProcessAssets() {
+        do {
+            exp = expectation(description: "Assets Download process")
+            let assetURLs = Mocks.assetURLs
+            resourcer = try PackageResourcer(urls: assetURLs)
+            resourcer.delegate = self
+            bundle = resourcer.bundle
+            
+            var imageCount = availableImageCount(assetURLs)
+            XCTAssertEqual(imageCount, 0)
+            
+            resourcer.process()
+            
+            waitForExpectations(timeout: 30)
+            XCTAssertEqual(errors.count, 0)
+            imageCount = availableImageCount(assetURLs)
+            XCTAssertEqual(imageCount, 2)
+        } catch {
+            XCTFail(error.localizedDescription)
+        }
+    }
+    
+    private func availableImageCount(_ imageURLs: [String: URL]) -> Int {
+         let imageNames = Set(imageURLs.compactMap({ $0.key.components(separatedBy: "@").first }))
+        #if canImport(UIKit)
+       
+        let images = imageNames
+            .compactMap({
+                UIImage(named: $0, in: bundle, compatibleWith: nil)
+            })
+        return images.count
+        #else
+        XCTFail("UIKit is mandatory for this test")
+        return 0
+        #endif
+        
+    }
 
     static var allTests = [
         ("testAssetDownload", testAssetDownload),
         ("testResourceExists", testResourceExists),
+        ("testProcessAssets", testProcessAssets),
     ]
 }
 
@@ -84,9 +131,8 @@ extension PackageResourcerTests: PackageResourcerDelegate {
         exp.fulfill()
     }
     
-    func packageResourcer(_ resourcer: PackageResourcer, finishedResourcingWithErrors: [String : Error]) {
+    func packageResourcer(_ resourcer: PackageResourcer, finishedResourcingWithErrors errors: [String : Error]) {
         exp.fulfill()
+        self.errors = errors
     }
-    
-    
 }

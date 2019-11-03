@@ -42,13 +42,13 @@ class PackageResourcer {
     
     var errors: [String: Error] = [:]
     
-    private let fileManager: FileManager
+    let fileManager: FileManager
     
     var bundleURL: URL {
         return bundle.bundleURL
     }
     
-    public let bundle: Bundle
+    private(set) public var bundle: Bundle
     
     var delegate: PackageResourcerDelegate?
     
@@ -57,7 +57,7 @@ class PackageResourcer {
             guard downloadResults.count == assetURLs.count else {
                 return
             }
-            
+            processDownloads(downloadResults)
         }
     }
     
@@ -69,6 +69,8 @@ class PackageResourcer {
     }
     
     public func process() {
+        downloadResults = []
+        
         assetURLs
             .forEach({ (key, url) in
                 guard !resourceExists(with: key) else {
@@ -80,7 +82,11 @@ class PackageResourcer {
                     self?.downloadResults.append(result)
                 }
         })
-        
+    }
+    
+    public func clearBundle() throws {
+        try fileManager.removeItem(at: bundleURL)
+        bundle = try fileManager.createBundle()
     }
     
     public func reprocess() {
@@ -120,7 +126,9 @@ class PackageResourcer {
     }
     
     func processDownloads(_ downloads: [DownloadResult]) {
+        self.errors = [:]
         var errors: [Error] = []
+        
         downloads
         .compactMap { (result) -> (Data, HTTPURLResponse)? in
             switch result {
@@ -134,8 +142,7 @@ class PackageResourcer {
         .forEach({ (data, response) in
             let fileName = assetURLs.filter({ $0.value == response.url }).first!.key
             do {
-                let url = bundleURL.appendingPathComponent(fileName)
-                try data.write(to: url)
+                try saveFile(data, with: fileName)
             } catch {
                 errors.append(error)
             }
@@ -148,6 +155,18 @@ class PackageResourcer {
                 }
                 self.errors[name] = error
         }
+        
+        switch self.errors.count {
+        case 0:
+            delegate?.finishedResourcing(self)
+        default:
+            delegate?.packageResourcer(self, finishedResourcingWithErrors: self.errors)
+        }
+    }
+    
+    func saveFile(_ data: Data, with name: String) throws {
+        let url = bundleURL.appendingPathComponent(name)
+        try data.write(to: url)
     }
     
     private func idError(_ error: Error) -> (String, Error)? {
